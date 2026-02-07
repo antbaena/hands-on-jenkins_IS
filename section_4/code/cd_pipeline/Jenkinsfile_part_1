@@ -26,13 +26,13 @@ pipeline {
     }
 }
 
-// --- FUNCIONES DEFINIDAS ---
+// --- FUNCIONES ---
 
 def buildApp() {
     echo "Construyendo la imagen..."
-    // Entramos en el directorio donde está el Dockerfile
+    // Asegúrate de que la ruta es correcta según tu repositorio
     dir ('section_4/code/cd_pipeline') {
-        // Usamos 'bat' en lugar del objeto docker.build para evitar errores de plugin en Windows
+        // Construimos la imagen
         bat "docker build -t hands-on-jenkins/myapp:${BUILD_NUMBER} ."
     }
 }
@@ -51,14 +51,18 @@ def deploy(environment) {
         error "Entorno no válido: ${environment}"
     }
 
-    // LÓGICA COMPATIBLE CON WINDOWS:
-    // Intentamos parar el contenedor. Si falla (porque no existe), hacemos un echo para que Jenkins no pare.
-    bat "docker stop ${containerName} || echo El contenedor no estaba corriendo, continuamos..."
+    // --- CORRECCIÓN CLAVE ---
+    // Usamos 'returnStatus: true' para que Jenkins NO falle si el contenedor no existe.
+    // Esto es mucho más seguro que usar || en Windows.
     
-    // Intentamos borrar el contenedor. Si falla, continuamos.
-    bat "docker rm ${containerName} || echo El contenedor no existia, continuamos..."
+    echo "Intentando detener contenedor previo..."
+    bat(script: "docker stop ${containerName}", returnStatus: true)
     
-    // Arrancamos el nuevo contenedor
-    // Mapeamos el puerto seleccionado (8888) al puerto interno de la app (5000)
+    echo "Intentando borrar contenedor previo..."
+    bat(script: "docker rm ${containerName}", returnStatus: true)
+    
+    // Este comando SÍ debe ser normal (sin returnStatus) porque si falla el arranque, 
+    // queremos que la pipeline falle y nos avise.
+    echo "Arrancando nuevo contenedor..."
     bat "docker run -d -p ${port}:5000 --name ${containerName} hands-on-jenkins/myapp:${BUILD_NUMBER}"
 }
