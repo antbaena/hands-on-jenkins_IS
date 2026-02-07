@@ -9,7 +9,6 @@ pipeline {
 
         stage("Build") {
             steps {
-                // Envolvemos la llamada en 'script' para usar funciones Groovy
                 script { 
                     buildApp() 
                 }
@@ -27,21 +26,20 @@ pipeline {
     }
 }
 
-// --- DEFINICIÓN DE FUNCIONES ---
+// --- FUNCIONES DEFINIDAS ---
 
 def buildApp() {
-    echo "Iniciando Build..."
-    // Asegúrate de que esta carpeta existe en tu repo, si no, quita el dir()
+    echo "Construyendo la imagen..."
+    // Entramos en el directorio donde está el Dockerfile
     dir ('section_4/code/cd_pipeline') {
-        // Usamos 'bat' para Windows
-        // El punto '.' al final es CRUCIAL (indica el directorio actual)
+        // Usamos 'bat' en lugar del objeto docker.build para evitar errores de plugin en Windows
         bat "docker build -t hands-on-jenkins/myapp:${BUILD_NUMBER} ."
     }
 }
 
 def deploy(environment) {
-    echo "Iniciando Deploy en ${environment}..."
-    
+    echo "Desplegando en entorno: ${environment}"
+
     def containerName = ''
     def port = ''
 
@@ -50,20 +48,17 @@ def deploy(environment) {
         port = "8888"
     } 
     else {
-        // 'error' es la forma correcta de fallar en Jenkins, System.exit rompe la JVM
-        error "Environment not valid: ${environment}"
+        error "Entorno no válido: ${environment}"
     }
 
-    // Lógica compatible con Windows para limpiar contenedores viejos
-    // El "|| echo ..." sirve para que si el comando falla (porque no existe el contenedor), 
-    // Jenkins NO pare la ejecución y siga adelante.
+    // LÓGICA COMPATIBLE CON WINDOWS:
+    // Intentamos parar el contenedor. Si falla (porque no existe), hacemos un echo para que Jenkins no pare.
+    bat "docker stop ${containerName} || echo El contenedor no estaba corriendo, continuamos..."
     
-    echo "Deteniendo contenedor anterior (si existe)..."
-    bat "docker stop ${containerName} || echo El contenedor no estaba corriendo"
+    // Intentamos borrar el contenedor. Si falla, continuamos.
+    bat "docker rm ${containerName} || echo El contenedor no existia, continuamos..."
     
-    echo "Borrando contenedor anterior (si existe)..."
-    bat "docker rm ${containerName} || echo El contenedor no existia"
-    
-    echo "Desplegando nuevo contenedor..."
+    // Arrancamos el nuevo contenedor
+    // Mapeamos el puerto seleccionado (8888) al puerto interno de la app (5000)
     bat "docker run -d -p ${port}:5000 --name ${containerName} hands-on-jenkins/myapp:${BUILD_NUMBER}"
 }
